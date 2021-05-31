@@ -291,7 +291,7 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
                 }
             }
         }
-
+        //获取指定注册ip
         String hostToRegistry = ConfigUtils.getSystemProperty(DUBBO_IP_TO_REGISTRY);
         if (StringUtils.isEmpty(hostToRegistry)) {
             hostToRegistry = NetUtils.getLocalHost();
@@ -301,7 +301,7 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
         map.put(REGISTER_IP_KEY, hostToRegistry);
 
         serviceMetadata.getAttachments().putAll(map);
-
+        //生成代理类
         ref = createProxy(map);
 
         serviceMetadata.setTarget(ref);
@@ -346,6 +346,7 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
             } else { // assemble URL from register center's configuration
                 // if protocols not injvm checkRegistry
                 if (!LOCAL_PROTOCOL.equalsIgnoreCase(getProtocol())) {
+                    //检查并获取注册中心配置
                     checkRegistry();
                     List<URL> us = ConfigValidationUtils.loadRegistries(this, false);
                     if (CollectionUtils.isNotEmpty(us)) {

@@ -186,6 +186,7 @@ public class ConfigValidationUtils {
                     address = ANYHOST_VALUE;
                 }
                 if (!RegistryConfig.NO_AVAILABLE.equalsIgnoreCase(address)) {
+                    //从config中获取配置信息
                     Map<String, String> map = new HashMap<String, String>();
                     AbstractConfig.appendParameters(map, application);
                     AbstractConfig.appendParameters(map, config);
