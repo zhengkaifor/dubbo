@@ -312,18 +312,75 @@ refer负责从注册中心拉取服务到本地
 
 注册中心，提供将接口信息注册到注册中心的抽象接口，目前官方提供的有zookeeper,redis,nacos等
 
+registry还提供了订阅功能，即由registry处理订阅节点发生变化的情况
+
 当前实现为(以zookeeper为例)
 
 RegistryProtocol->export->registryFactory.getRegistry->ZookeeperRegistryFactory.createRegistry
 
 ->ZookeeperRegistry.ZookeeperTransporter.connect
 
+###### 监听
+
+在作为provider时：
+
+注册中心会订阅configurators节点
+
+作为consumer时：
+
+注册中心会订阅configurators，providers，routers三个节点
+
+利用该特性，我们可以通过dubboAdmin动态修改运行中配置。该特性实际为刷新Directory中的invoker。
+
+dubbo中监听节点发生变化时，需要注册中心下发全量数据进行处理，即每次变更后都会下发全量的节点数据到客户端
+
 ### Directory
 
-动态注册信息
+#### 概念
+
+动态注册信息，consumer会将从zk上取回来的providers信息存放在Directory中，其中Directory.url为RegistryUrl，
+
+Directory.consumerUrl为注册到zookeeper上的url（这里有个bug，具体看问题章节）。
+
+每当zookeeper监听到configurators，providers，routers三个节点的任一变化后，都会触发org.apache.dubbo.registry.integration.RegistryDirectory#notify，在该接口中，会重新刷新，改写invoker（列如provider下线，动态修改配置等都会触发该接口）
+
+#### 代码
+
+```java
+@Override
+    public synchronized void notify(List<URL> urls) {
+        Map<String, List<URL>> categoryUrls = urls.stream()
+                .filter(Objects::nonNull)
+                .filter(this::isValidCategory)
+                .filter(this::isNotCompatibleFor26x)
+                .collect(Collectors.groupingBy(this::judgeCategory));
+
+        List<URL> configuratorURLs = categoryUrls.getOrDefault(CONFIGURATORS_CATEGORY, Collections.emptyList());
+        this.configurators = Configurator.toConfigurators(configuratorURLs).orElse(this.configurators);
+
+        List<URL> routerURLs = categoryUrls.getOrDefault(ROUTERS_CATEGORY, Collections.emptyList());
+        toRouters(routerURLs).ifPresent(this::addRouters);
+
+        // providers
+        List<URL> providerURLs = categoryUrls.getOrDefault(PROVIDERS_CATEGORY, Collections.emptyList());
+        /**
+         * 3.x added for extend URL address
+         */
+        ExtensionLoader<AddressListener> addressListenerExtensionLoader = ExtensionLoader.getExtensionLoader(AddressListener.class);
+        List<AddressListener> supportedListeners = addressListenerExtensionLoader.getActivateExtension(getUrl(), (String[]) null);
+        if (supportedListeners != null && !supportedListeners.isEmpty()) {
+            for (AddressListener addressListener : supportedListeners) {
+                providerURLs = addressListener.notify(providerURLs, getConsumerUrl(),this);
+            }
+        }
+        refreshOverrideAndInvoker(providerURLs);
+    }
+```
 
 ### Cluster
 
 ### Invoker
 
 ### Filter
+
+### 问题
