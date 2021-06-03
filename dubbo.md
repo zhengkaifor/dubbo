@@ -379,8 +379,38 @@ Directory.consumerUrl为注册到zookeeper上的url（这里有个bug，具体�
 
 ### Cluster
 
+dubbo集群实现类，也可以说是invoker的工厂类。通过
+
+```java
+protected abstract <T> AbstractClusterInvoker<T> doJoin(Directory<T> directory) throws RpcException;
+```
+
+这个方法生成相应的invoker，也是dubbo的拓展点。可通过配置url上的cluster值来指定
+
+常用的有以下几种：
+
+1.FailoverCluster--若无配置，默认为该类型。 失败跳过
+
+2.FailbackCluster--失败即返回，且记录失败请求，在后台自动重试
+
+3.FailfastCluster--仅执行一次，失败即返回
+
+4.FailsafeCluster--失败后返回空对象，不返回错误。
+
+5.ForkingCluster--同时调用多个invoker
+
+6.BroadcastCluster--遍历调用全部invoker
+
 ### Invoker
 
+有两种。
+
+ClusterInvoker:我们最终所使用的invoker，一个ClusterInvoker持有多个普通的invoker（provider），其中多个普通的provider保存在Directory中
+
+dubboInvoker：被ClusterInvoker持有，由ClusterInvoker选出需要执行方法的dubboInvoker 执行方法。
+
 ### Filter
+
+
 
 ### 问题

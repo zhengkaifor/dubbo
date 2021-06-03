@@ -68,7 +68,9 @@ public interface Protocol {
      * @return invoker service's local proxy
      * @throws RpcException when there's any error while connecting to the service provider
      */
-    //从注册中心拉取服务到本地
+    //根据url决定具体的Protocol
+    //其中注册协议负责,即registrer:// 负责从注册中心拉取provider
+    //其余列如dubbo协议 负责生成具体的invoker,列如dubboInvoker等
     @Adaptive
     <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException;
 
