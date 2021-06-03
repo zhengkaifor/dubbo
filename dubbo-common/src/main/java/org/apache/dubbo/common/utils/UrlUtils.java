@@ -408,7 +408,7 @@ public class UrlUtils {
                 && !ANY_VALUE.equals(consumerUrl.getParameter(ENABLED_KEY))) {
             return false;
         }
-
+        //在这里会将consumerUrl 跟providerUrl做match
         String consumerGroup = consumerUrl.getParameter(GROUP_KEY);
         String consumerVersion = consumerUrl.getParameter(VERSION_KEY);
         String consumerClassifier = consumerUrl.getParameter(CLASSIFIER_KEY, ANY_VALUE);

@@ -308,6 +308,10 @@ refer负责从注册中心拉取服务到本地
 
 ->RegistryDirectory.refreshInvoker 刷新本地invoker
 
+###### invoker
+
+​	Protocol会根据url头上的协议不同生成相应的invoker，如果是register则生成clusterInvoker，dubbo则生成dubboInvoker等
+
 ### registry
 
 注册中心，提供将接口信息注册到注册中心的抽象接口，目前官方提供的有zookeeper,redis,nacos等
@@ -411,6 +415,94 @@ dubboInvoker：被ClusterInvoker持有，由ClusterInvoker选出需要执行方�
 
 ### Filter
 
+在生成普通invoker时，
 
+```java
+@Override
+public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
+    if (UrlUtils.isRegistry(invoker.getUrl())) {
+        return protocol.export(invoker);
+    }
+    return protocol.export(buildInvokerChain(invoker, SERVICE_FILTER_KEY, CommonConstants.PROVIDER));
+}
+
+@Override
+public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
+    if (UrlUtils.isRegistry(url)) {
+        return protocol.refer(type, url);
+    }
+    return buildInvokerChain(protocol.refer(type, url), REFERENCE_FILTER_KEY, CommonConstants.CONSUMER);
+}
+```
+
+会构建invoker的调用链，filter会在真实invoker被调用前进行一些处理，比较常见的比如封装异常等
 
 ### 问题
+
+###### group不可用
+
+现象：
+
+当provider，consumer都配置dubbo.registry.group=xx时，理论上应该可以调用。但是实际上会提示no provider
+
+原因：
+
+provider如果配置了dubbo.registry.group，会在zk上注册为xx/Interface，其中url为dubbo://xxx。具体注册节点如下
+
+![image-20210603153756762](https://gitee.com/zk94/oss/raw/master/uPic/image-20210603153756762.png)
+
+但是consumer在处理中，其中consumerUrl带上了group标签
+
+```java
+public AbstractDirectory(URL url, RouterChain<T> routerChain) {
+    if (url == null) {
+        throw new IllegalArgumentException("url == null");
+    }
+
+    queryMap = StringUtils.parseQueryString(url.getParameterAndDecoded(REFER_KEY));
+    String path = queryMap.get(PATH_KEY);
+    this.consumedProtocol = this.queryMap.get(PROTOCOL_KEY) == null ? DUBBO : this.queryMap.get(PROTOCOL_KEY);
+    this.url = url.removeParameter(REFER_KEY).removeParameter(MONITOR_KEY);
+    //url为注册url, 这里直接变更了注册url的协议,并且加上了自身的配置信息,在 url里有group信息的情况下,consumerUrl也带上了group标签
+    this.consumerUrl = this.url.setProtocol(consumedProtocol).setPath(path == null ? queryMap.get(INTERFACE_KEY) : path).addParameters(queryMap)
+            .removeParameter(MONITOR_KEY);
+
+    setRouterChain(routerChain);
+}
+```
+
+在生成invoker时，会导致consumerUrl跟providerUrl无法匹配上，导致无法正确生成invoker
+
+```java
+public static boolean isMatch(URL consumerUrl, URL providerUrl) {
+    String consumerInterface = consumerUrl.getServiceInterface();
+    String providerInterface = providerUrl.getServiceInterface();
+    //FIXME accept providerUrl with '*' as interface name, after carefully thought about all possible scenarios I think it's ok to add this condition.
+    if (!(ANY_VALUE.equals(consumerInterface)
+            || ANY_VALUE.equals(providerInterface)
+            || StringUtils.isEquals(consumerInterface, providerInterface))) {
+        return false;
+    }
+
+    if (!isMatchCategory(providerUrl.getParameter(CATEGORY_KEY, DEFAULT_CATEGORY),
+            consumerUrl.getParameter(CATEGORY_KEY, DEFAULT_CATEGORY))) {
+        return false;
+    }
+    if (!providerUrl.getParameter(ENABLED_KEY, true)
+            && !ANY_VALUE.equals(consumerUrl.getParameter(ENABLED_KEY))) {
+        return false;
+    }
+    //在这里会将consumerUrl 跟providerUrl做match
+    String consumerGroup = consumerUrl.getParameter(GROUP_KEY);
+    String consumerVersion = consumerUrl.getParameter(VERSION_KEY);
+    String consumerClassifier = consumerUrl.getParameter(CLASSIFIER_KEY, ANY_VALUE);
+
+    String providerGroup = providerUrl.getParameter(GROUP_KEY);
+    String providerVersion = providerUrl.getParameter(VERSION_KEY);
+    String providerClassifier = providerUrl.getParameter(CLASSIFIER_KEY, ANY_VALUE);
+    return (ANY_VALUE.equals(consumerGroup) || StringUtils.isEquals(consumerGroup, providerGroup) || StringUtils.isContains(consumerGroup, providerGroup))
+            && (ANY_VALUE.equals(consumerVersion) || StringUtils.isEquals(consumerVersion, providerVersion))
+            && (consumerClassifier == null || ANY_VALUE.equals(consumerClassifier) || StringUtils.isEquals(consumerClassifier, providerClassifier));
+}
+```
+
