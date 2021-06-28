@@ -415,7 +415,7 @@ dubboInvoker：被ClusterInvoker持有，由ClusterInvoker选出需要执行方�
 
 ### Filter
 
-在生成普通invoker时，
+在ProtocolFilterWrapper中进行构建 在生成普通invoker时
 
 ```java
 @Override
